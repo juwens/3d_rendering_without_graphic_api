@@ -1,5 +1,6 @@
 ﻿using SkiaSharp;
 using System.Windows;
+using System.Windows.Threading;
 
 namespace Gui;
 
@@ -8,17 +9,17 @@ namespace Gui;
 /// </summary>
 public partial class MainWindow : Window
 {
-    private readonly PeriodicTimer _timer;
+    private readonly DispatcherTimer _timer;
 
     public MainWindow()
     {
-        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        _timer = new DispatcherTimer(TimeSpan.FromMilliseconds(100), DispatcherPriority.Normal, Callback, Dispatcher);
         InitializeComponent();
-        Task.Run(async () =>
-        {
-            await _timer.WaitForNextTickAsync();
-            _skElm.InvalidateVisual();
-        });
+    }
+
+    private void Callback(object? sender, EventArgs e)
+    {
+        _skElm.InvalidateVisual();
     }
 
     private void SKElement_PaintSurface(object sender, SkiaSharp.Views.Desktop.SKPaintSurfaceEventArgs e)

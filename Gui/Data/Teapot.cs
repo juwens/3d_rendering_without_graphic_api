@@ -1,11 +1,13 @@
 ﻿using System.Collections.Immutable;
-using System.Numerics;
 
 namespace Gui.Data;
 
 internal static class Teapot
 {
-    private static readonly Lazy<ImmutableArray<float>> _rawVertices2 = new Lazy<ImmutableArray<float>>(() => new float[]
+    /// <summary>
+    /// https://github.com/kretash/UtahTeapot/blob/master/teapot.h
+    /// </summary>
+    public static readonly ImmutableArray<float> RawVertices = new float[]
     {
 #region numbers
         0.700000f, -1.200000f, 0.000000f,
@@ -1737,15 +1739,5 @@ internal static class Teapot
         0.562400f, -1.200000f, 0.330300f,
         0.458200f, -1.255600f, 0.269100f
 #endregion
-    }.ToImmutableArray());
-
-    /// <summary>
-    /// https://github.com/kretash/UtahTeapot/blob/master/teapot.h
-    /// </summary>
-    public static readonly Lazy<ImmutableArray<Vector3>> LazyVertices = new Lazy<ImmutableArray<Vector3>>(() =>
-    {
-        return _rawVertices2.Value.Chunk(3).Select(x => new Vector3(x[0], -1f * x[1], x[2])).ToImmutableArray();
-    });
-    
-    public static ImmutableArray<Vector3> Vertices => LazyVertices.Value;
+    }.ToImmutableArray();
 }

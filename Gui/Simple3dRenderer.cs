@@ -10,7 +10,7 @@ namespace Gui;
 
 class Simple3dRenderer
 {
-    static Vector3 eye = new(0, 0, -5);
+    static Vector3 Eye = new(0, 1, -5);
     static float h_fov = 65;
     static SKSizeI renderResolution = new(200, 200);
     static Vector3 eyeToRenderPlane = new(0, 0, 1);
@@ -18,13 +18,19 @@ class Simple3dRenderer
     static float renderPlaneHeight = renderPlaneWidth / renderResolution.Width * renderResolution.Height;
     static readonly bool UseRandomColor = false;
     static readonly Vector3 Light = new Vector3(5, 5, -5);
-    static readonly Vector3 LightNormal = new Vector3(-1, -1, 1);
+    static readonly Vector3 LightNormal = Vector3.Normalize(new Vector3(-1, -1, 1));
+    static readonly float Pi = (float)Math.PI;
+
 
     public static void Draw(SKPaintSurfaceEventArgs e)
     {
         var sw = Stopwatch.StartNew();
 
-        var pxTriangles = GetPixelTriangles();
+        var rand = new Random(1);
+        var deg = ((float)DateTime.UtcNow.TimeOfDay.TotalSeconds) % 360;
+        var transform = RotateY(-deg / 10);
+
+        var fragments = GetFragments(transform);
         var canvas = e.Surface.Canvas;
         canvas.Clear(SKColors.LightGray);
         canvas.Scale(1, -1);
@@ -33,13 +39,14 @@ class Simple3dRenderer
         canvas.DrawRect(0, 0, renderResolution.Width, renderResolution.Height, new SKPaint() { StrokeWidth = 2, Color = SKColors.Black, IsStroke = true });
 
         var scaling = renderResolution.Width / renderPlaneWidth;
-        float maxDistance = pxTriangles.SelectMany(x => x.Points).Select(x => Vector3.Distance(eye, x.Vector)).Max();
+        float maxDistance = fragments.Count == 0 ? 0 : fragments.SelectMany(x => x.SourceTriangle.Points).Select(x => Vector3.Distance(Eye, x.Vector)).Max();
 
-        foreach (var triangle in pxTriangles)
+        List<float> determinants = new List<float>();
+        foreach (var fragment in fragments)
         {
-            SKPoint[] points = triangle.Points.Select(x => new SKPoint(x.Vector.X * scaling + (scaling / 2), x.Vector.Y * scaling + (scaling / 2))).ToArray();
+            SKPoint[] points = fragment.PixelTriangle.Points.Select(x => new SKPoint(x.Vector.X * scaling + (scaling / 2), x.Vector.Y * scaling + (scaling / 2))).ToArray();
 
-            var colors = triangle.Points.Select(x => GetColor(x, triangle)).ToArray();
+            var colors = fragment.SourceTriangle.Points.Select(x => GetColor(x, fragment.SourceTriangle)).ToArray();
             canvas.DrawVertices(SKVertexMode.Triangles, points, colors, new SKPaint() { Color = SKColors.Magenta });
         }
 
@@ -56,74 +63,121 @@ class Simple3dRenderer
         {
             if (UseRandomColor)
             {
-                return new SKColor((byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255));
+                return new SKColor((byte)rand.Next(255), (byte)rand.Next(255), (byte)rand.Next(255));
             }
 
-            float lightDet = Vector3.Dot(tr.Normal, LightNormal);
-            if (lightDet < 0.00001f)
-            {
-                return SKColors.Magenta;
-            }
+            float dotProd = Vector3.Dot(tr.Normal, LightNormal);
+            determinants.Add(dotProd);
 
-            return pt.Color.ToSKColor().ScaleLuminescenceByDeterminant(lightDet);
+            return pt.Color.ToSKColor().ScaleLuminescenceByDeg(Acos(dotProd));
         }
 
         sw.Stop();
 
         Debug.WriteLine($"frame time {sw.Elapsed.TotalMilliseconds:F0} ms");
+
+        var foo = determinants.GroupBy(x => x).ToDictionary(x => x.Key, x => x.Count()).ToList();
     }
 
-    private static IReadOnlyList<Triangle> GetPixelTriangles()
+    // https://de.mathworks.com/help/phased/ref/rotz.html
+    private static Matrix4x4 RotateZ(float phi)
+    {
+        var rad = (phi % 360f) * 2f * Pi;
+
+        return new Matrix4x4(
+            Cos(rad), -Sin(rad), 0, 0,
+            Sin(rad), Cos(rad), 0, 0,
+            0, 0, 1, 0,
+            0, 0, 0, 1);
+    }
+
+    // https://de.mathworks.com/help/phased/ref/rotx.html
+    private static Matrix4x4 RotateX(float alpha)
+    {
+        var rad = (alpha % 360f) * 2f * Pi;
+
+        return new Matrix4x4(
+            1, 0, 0, 0,
+            0, Cos(rad), -Sin(rad), 0,
+            0, Sin(rad), Cos(rad), 0,
+            0, 0, 0, 1);
+    }
+
+    // https://de.mathworks.com/help/phased/ref/roty.html
+    private static Matrix4x4 RotateY(float beta)
+    {
+        var rad = (beta % 360f) * 2f * Pi;
+
+        return new Matrix4x4(
+            Cos(rad), 0, Sin(rad), 0,
+            0, 1, 0, 0,
+            -Sin(rad), 0, Cos(rad), 0,
+            0, 0, 0, 1);
+    }
+
+    static float Acos(float rad) => (float)Math.Acos(rad);
+    static float Cos(float rad) => (float)Math.Cos(rad);
+    static float Sin(float rad) => (float)Math.Sin(rad);
+
+    private static IReadOnlyList<Fragment> GetFragments(Matrix4x4 transform)
     {
         // assumption: left handed 3d space
         // unit is meter
         Vector3 viewDirection = new(0, 0, 1);
 
-        Vector3 renderPlaneTopLeft = eye + eyeToRenderPlane + new Vector3(renderPlaneWidth / 2, renderPlaneHeight / 2, 0);
+        Vector3 renderPlaneTopLeft = Eye + eyeToRenderPlane + new Vector3(renderPlaneWidth / 2, renderPlaneHeight / 2, 0);
         //Triangle renderPlane = ;
 
         SKSize pixelSize = new SKSize(renderPlaneWidth / renderResolution.Width, renderPlaneHeight / renderResolution.Height);
 
-        Vector3 renderPlaneCenter = eye + eyeToRenderPlane;
+        Vector3 renderPlaneCenter = Eye + eyeToRenderPlane;
         Plane renderPlane = Plane.CreateFromVertices(renderPlaneCenter, renderPlaneCenter + Vector3.UnitX, renderPlaneCenter + Vector3.UnitY);
 
-        var geometryTriangles = Models.Teapot
+        var geometryTriangles = Models.GetVertices(Teapot.RawVertices, transform, true)
             .Chunk(3)
             .Select(x => new Triangle(x[0], x[1], x[2], Color.FromArgb(255, 237, 32)))
-            .OrderByDescending(x => Vector3.Distance(eye, x.A.Vector)) // we have no z-buffer, so we draw every triangle from back to forth
+            .OrderByDescending(x => Vector3.Distance(Eye, x.A.Vector)) // we have no z-buffer, so we draw every triangle from back to forth
             .ToArray();
 
-        List<Triangle> pixelTriangles = new();
+        List<Fragment> fragments = new();
 
         foreach (var tri in geometryTriangles)
         {
-            var determinant = Vector3.Dot(tri.Normal, eyeToRenderPlane);
-            if (determinant < 0)
+            var dotProd = Vector3.Dot(tri.Normal, eyeToRenderPlane);
+            // culling
+            if (dotProd > 0)
             {
                 continue;
             }
 
-            Vector3? i_a = Intersection(eye, renderPlane, tri.A.Vector);
-            Vector3? i_b = Intersection(eye, renderPlane, tri.B.Vector);
-            Vector3? i_c = Intersection(eye, renderPlane, tri.C.Vector);
+            Vector3? isectA = Intersection(Eye, renderPlane, tri.A.Vector);
+            Vector3? isectB = Intersection(Eye, renderPlane, tri.B.Vector);
+            Vector3? isectC = Intersection(Eye, renderPlane, tri.C.Vector);
 
-            if (i_a is null || i_b is null || i_c is null)
+            if (isectA is null || isectB is null || isectC is null)
             {
                 Debug.WriteLine("no pixel triangle found");
                 Debugger.Break();
             }
 
-            var pixelTriangle = new Triangle(
-                new(i_a.Value, tri.A.Color),
-                new(i_b.Value, tri.B.Color),
-                new(i_c.Value, tri.C.Color));
+            var fragment = new Fragment()
+            {
+                PixelTriangle = new Triangle(
+                    new(isectA.Value, tri.A.Color),
+                    new(isectB.Value, tri.B.Color),
+                    new(isectC.Value, tri.C.Color)),
 
-            pixelTriangles.Add(pixelTriangle);
+                SourceTriangle = tri,
+            };
+            fragments.Add(fragment);
         }
 
-        return pixelTriangles;
+        return fragments;
     }
 
+    /// <summary>
+    /// https://www.habrador.com/tutorials/math/4-plane-ray-intersection/
+    /// </summary>
     private static Vector3? Intersection(Vector3 l_0, Plane renderPlane, Vector3 p_triangle)
     {
         Vector3 p_0 = renderPlane.Normal * renderPlane.D;
