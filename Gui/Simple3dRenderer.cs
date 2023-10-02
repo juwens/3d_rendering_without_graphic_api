@@ -25,8 +25,7 @@ class Simple3dRenderer
         var canvas = e.Surface.Canvas;
         canvas.Clear(SKColors.LightGray);
         canvas.Scale(1, -1);
-        //canvas.Translate(-e.Surface.Canvas.DeviceClipBounds.Height, 100);
-        canvas.Translate(20, -renderResolution.Height - 20);
+        canvas.Translate(renderResolution.Width / 2, -renderResolution.Height - 20);
 
         canvas.DrawRect(0, 0, renderResolution.Width, renderResolution.Height, new SKPaint() { StrokeWidth = 2, Color = SKColors.Black, IsStroke = true });
 
@@ -36,7 +35,7 @@ class Simple3dRenderer
         foreach (var triangle in pxTriangles)
         {
             SKPoint[] points = triangle.Points.Select(x => new SKPoint(x.Vector.X * scaling + (scaling / 2), x.Vector.Y * scaling + (scaling / 2))).ToArray();
-            
+
             var colors = triangle.Points.Select(GetColor).ToArray();
             canvas.DrawVertices(SKVertexMode.Triangles, points, colors, new SKPaint() { Color = SKColors.Magenta });
         }
@@ -77,12 +76,22 @@ class Simple3dRenderer
         Vector3 renderPlaneCenter = eye + eyeToRenderPlane;
         Plane renderPlane = Plane.CreateFromVertices(renderPlaneCenter, renderPlaneCenter + Vector3.UnitX, renderPlaneCenter + Vector3.UnitY);
 
-        var geometryTriangles = Models.Teapot.Chunk(3).Select(x => new Triangle(x[0], x[1], x[2], Color.Yellow)).ToArray();
+        var geometryTriangles = Models.Teapot
+            .Chunk(3)
+            .Select(x => new Triangle(x[0], x[1], x[2], Color.Yellow))
+            .OrderByDescending(x => Vector3.Distance(eye, x.A.Vector)) // we have no z-buffer, so we draw every triangle from back to forth
+            .ToArray();
 
         List<Triangle> pixelTriangles = new();
 
         foreach (var tri in geometryTriangles)
         {
+            var determinant = Vector3.Dot(tri.Normal, eyeToRenderPlane);
+            if (determinant < 0)
+            {
+                continue;
+            }
+
             Vector3? i_a = Intersection(eye, renderPlane, tri.A.Vector);
             Vector3? i_b = Intersection(eye, renderPlane, tri.B.Vector);
             Vector3? i_c = Intersection(eye, renderPlane, tri.C.Vector);
@@ -94,9 +103,9 @@ class Simple3dRenderer
             }
 
             var pixelTriangle = new Triangle(
-                new (i_a.Value, tri.A.Color), 
-                new (i_b.Value, tri.B.Color),
-                new (i_c.Value, tri.C.Color));
+                new(i_a.Value, tri.A.Color),
+                new(i_b.Value, tri.B.Color),
+                new(i_c.Value, tri.C.Color));
 
             pixelTriangles.Add(pixelTriangle);
         }

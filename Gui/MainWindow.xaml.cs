@@ -8,9 +8,17 @@ namespace Gui;
 /// </summary>
 public partial class MainWindow : Window
 {
+    private readonly PeriodicTimer _timer;
+
     public MainWindow()
     {
+        _timer = new PeriodicTimer(TimeSpan.FromSeconds(1));
         InitializeComponent();
+        Task.Run(async () =>
+        {
+            await _timer.WaitForNextTickAsync();
+            _skElm.InvalidateVisual();
+        });
     }
 
     private void SKElement_PaintSurface(object sender, SkiaSharp.Views.Desktop.SKPaintSurfaceEventArgs e)
