@@ -1,15 +1,13 @@
 ﻿using SkiaSharp;
 
-namespace Gui.Extensions
+namespace Gui.Extensions;
+
+internal static class SKColorExtensions
 {
-    internal static class SKColorExtensions
+    public static SKColor ScaleLuminescenceByDeterminant(this SKColor color, float determinant)
     {
-        public static SKColor WithBrightness(this SKColor color, byte brightness)
-        {
-            return new SKColor(
-                (byte)(1f * color.Red * brightness / 255),
-                (byte)(1f * color.Green * brightness / 255),
-                (byte)(1f * color.Blue * brightness / 255));
-        }
+        color.ToHsl(out float h, out float s, out float l);
+        l = l * (determinant + 0.3f);
+        return SKColor.FromHsl(h, s, l);
     }
 }

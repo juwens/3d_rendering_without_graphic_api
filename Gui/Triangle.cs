@@ -32,7 +32,7 @@ struct Triangle
         //}
         //Radius = radius;
 
-        Normal = Vector3.Normalize(Vector3.Cross(b.Vector - a.Vector, c.Vector - a.Vector));
+        Normal = Vector3.Cross(b.Vector - a.Vector, c.Vector - a.Vector);
     }
 
     public Triangle(Vector3 a, Vector3 b, Vector3 c, Color color) : this(

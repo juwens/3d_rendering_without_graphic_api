@@ -16,6 +16,9 @@ class Simple3dRenderer
     static Vector3 eyeToRenderPlane = new(0, 0, 1);
     static float renderPlaneWidth = (float)Math.Tan(h_fov / 2) * eyeToRenderPlane.Length() * 2;
     static float renderPlaneHeight = renderPlaneWidth / renderResolution.Width * renderResolution.Height;
+    static readonly bool UseRandomColor = false;
+    static readonly Vector3 Light = new Vector3(5, 5, -5);
+    static readonly Vector3 LightNormal = new Vector3(-1, -1, 1);
 
     public static void Draw(SKPaintSurfaceEventArgs e)
     {
@@ -36,7 +39,7 @@ class Simple3dRenderer
         {
             SKPoint[] points = triangle.Points.Select(x => new SKPoint(x.Vector.X * scaling + (scaling / 2), x.Vector.Y * scaling + (scaling / 2))).ToArray();
 
-            var colors = triangle.Points.Select(GetColor).ToArray();
+            var colors = triangle.Points.Select(x => GetColor(x, triangle)).ToArray();
             canvas.DrawVertices(SKVertexMode.Triangles, points, colors, new SKPaint() { Color = SKColors.Magenta });
         }
 
@@ -49,12 +52,20 @@ class Simple3dRenderer
         canvas.DrawLine(0, renderResolution.Height / 2, renderResolution.Width, renderResolution.Height / 2, axisPaint);
         canvas.DrawLine(renderResolution.Width / 2, 0, renderResolution.Width / 2, renderResolution.Height, axisPaint);
 
-        SKColor GetColor(Point3 point)
+        SKColor GetColor(Point3 pt, Triangle tr)
         {
-            return new SKColor((byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255));
+            if (UseRandomColor)
+            {
+                return new SKColor((byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255));
+            }
 
-            float d = Vector3.Distance(point.Vector, eye);
-            return point.Color.ToSKColor().WithBrightness((byte)(d / maxDistance * 255));
+            float lightDet = Vector3.Dot(tr.Normal, LightNormal);
+            if (lightDet < 0.00001f)
+            {
+                return SKColors.Magenta;
+            }
+
+            return pt.Color.ToSKColor().ScaleLuminescenceByDeterminant(lightDet);
         }
 
         sw.Stop();
@@ -78,7 +89,7 @@ class Simple3dRenderer
 
         var geometryTriangles = Models.Teapot
             .Chunk(3)
-            .Select(x => new Triangle(x[0], x[1], x[2], Color.Yellow))
+            .Select(x => new Triangle(x[0], x[1], x[2], Color.FromArgb(255, 237, 32)))
             .OrderByDescending(x => Vector3.Distance(eye, x.A.Vector)) // we have no z-buffer, so we draw every triangle from back to forth
             .ToArray();
 
