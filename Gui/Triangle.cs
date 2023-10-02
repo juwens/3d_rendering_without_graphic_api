@@ -1,17 +1,19 @@
-﻿using System;
+﻿using System.Collections.Immutable;
+using System.Drawing;
 using System.Numerics;
-using System.Windows.Media.Media3D;
 
 namespace Gui;
 
 // size = 9 * sizeof(float) = 36 byte
 struct Triangle
 {
-    public Triangle(Vector3 a, Vector3 b, Vector3 c)
+    public Triangle(Point3 a, Point3 b, Point3 c)
     {
         A = a;
         B = b;
         C = c;
+
+        Points = ImmutableArray.Create(a, b, c);
 
         //Center = new Vector3(
         //    (a.X + b.X + c.X) / 3,
@@ -29,17 +31,39 @@ struct Triangle
         //    }
         //}
         //Radius = radius;
-        
-        Normal = Vector3.Normalize(Vector3.Cross(b - a, c - a));
+
+        Normal = Vector3.Normalize(Vector3.Cross(b.Vector - a.Vector, c.Vector - a.Vector));
     }
 
-    public Vector3 A { get; }
-    public Vector3 B { get; }
-    public Vector3 C { get; }
+    public Triangle(Vector3 a, Vector3 b, Vector3 c, Color color) : this(
+        new Point3(a, color),
+        new Point3(b, color),
+        new Point3(c, color))
+    {
+    }
+
+    public Point3 A { get; }
+    public Point3 B { get; }
+    public Point3 C { get; }
+
     //public Vector3 Center { get; }
     ///// <summary>
     ///// Triangle is guaranteed to be within radius of <see cref="Center"/>
     ///// </summary>
     //public float Radius { get; }
     public Vector3 Normal { get; }
+
+    public ImmutableArray<Point3> Points { get; }
+}
+
+internal struct Point3
+{
+    public Point3(Vector3 vec, Color color)
+    {
+        Vector = vec;
+        Color = color;
+    }
+
+    public Vector3 Vector { get; }
+    public Color Color { get; }
 }

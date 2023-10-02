@@ -1,10 +1,10 @@
 ﻿using SkiaSharp;
 using System.Numerics;
-using System;
 using System.Diagnostics;
-using System.Collections.Generic;
 using System.Drawing;
 using SkiaSharp.Views.Desktop;
+using Gui.Data;
+using Gui.Extensions;
 
 namespace Gui;
 
@@ -19,23 +19,25 @@ class Simple3dRenderer
 
     public static void Draw(SKPaintSurfaceEventArgs e)
     {
+        var sw = Stopwatch.StartNew();
 
         var pxTriangles = GetPixelTriangles();
         var canvas = e.Surface.Canvas;
         canvas.Clear(SKColors.LightGray);
-        canvas.Translate(1, 1);
+        canvas.Scale(1, -1);
+        //canvas.Translate(-e.Surface.Canvas.DeviceClipBounds.Height, 100);
+        canvas.Translate(20, -renderResolution.Height - 20);
+
         canvas.DrawRect(0, 0, renderResolution.Width, renderResolution.Height, new SKPaint() { StrokeWidth = 2, Color = SKColors.Black, IsStroke = true });
 
         var scaling = renderResolution.Width / renderPlaneWidth;
+        float maxDistance = pxTriangles.SelectMany(x => x.Points).Select(x => Vector3.Distance(eye, x.Vector)).Max();
+
         foreach (var triangle in pxTriangles)
         {
-            SKPoint[] points = new[]
-            {
-                new SKPoint(triangle.A.X * scaling, triangle.A.Y * scaling),
-                new SKPoint(triangle.B.X * scaling, triangle.B.Y * scaling),
-                new SKPoint(triangle.C.X * scaling, triangle.C.Y * scaling),
-            };
-            var colors = new SKColor[] { SKColors.Red, SKColors.Green, SKColors.Blue };
+            SKPoint[] points = triangle.Points.Select(x => new SKPoint(x.Vector.X * scaling + (scaling / 2), x.Vector.Y * scaling + (scaling / 2))).ToArray();
+            
+            var colors = triangle.Points.Select(GetColor).ToArray();
             canvas.DrawVertices(SKVertexMode.Triangles, points, colors, new SKPaint() { Color = SKColors.Magenta });
         }
 
@@ -47,6 +49,18 @@ class Simple3dRenderer
         };
         canvas.DrawLine(0, renderResolution.Height / 2, renderResolution.Width, renderResolution.Height / 2, axisPaint);
         canvas.DrawLine(renderResolution.Width / 2, 0, renderResolution.Width / 2, renderResolution.Height, axisPaint);
+
+        SKColor GetColor(Point3 point)
+        {
+            return new SKColor((byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255), (byte)Random.Shared.Next(255));
+
+            float d = Vector3.Distance(point.Vector, eye);
+            return point.Color.ToSKColor().WithBrightness((byte)(d / maxDistance * 255));
+        }
+
+        sw.Stop();
+
+        Debug.WriteLine($"frame time {sw.Elapsed.TotalMilliseconds:F0} ms");
     }
 
     private static IReadOnlyList<Triangle> GetPixelTriangles()
@@ -63,18 +77,15 @@ class Simple3dRenderer
         Vector3 renderPlaneCenter = eye + eyeToRenderPlane;
         Plane renderPlane = Plane.CreateFromVertices(renderPlaneCenter, renderPlaneCenter + Vector3.UnitX, renderPlaneCenter + Vector3.UnitY);
 
+        var geometryTriangles = Models.Teapot.Chunk(3).Select(x => new Triangle(x[0], x[1], x[2], Color.Yellow)).ToArray();
 
-        // clockwise
-        Triangle triangle = new(new(0, 0, 0), new(0, 1, 0), new(1, 0, 0));
-
-        var geometryTriangles = new[] { triangle };
         List<Triangle> pixelTriangles = new();
 
         foreach (var tri in geometryTriangles)
         {
-            Vector3? i_a = Intersection(eye, renderPlane, tri.A);
-            Vector3? i_b = Intersection(eye, renderPlane, tri.B);
-            Vector3? i_c = Intersection(eye, renderPlane, tri.C);
+            Vector3? i_a = Intersection(eye, renderPlane, tri.A.Vector);
+            Vector3? i_b = Intersection(eye, renderPlane, tri.B.Vector);
+            Vector3? i_c = Intersection(eye, renderPlane, tri.C.Vector);
 
             if (i_a is null || i_b is null || i_c is null)
             {
@@ -82,7 +93,11 @@ class Simple3dRenderer
                 Debugger.Break();
             }
 
-            var pixelTriangle = new Triangle(i_a.Value, i_b.Value, i_c.Value);
+            var pixelTriangle = new Triangle(
+                new (i_a.Value, tri.A.Color), 
+                new (i_b.Value, tri.B.Color),
+                new (i_c.Value, tri.C.Color));
+
             pixelTriangles.Add(pixelTriangle);
         }
 
