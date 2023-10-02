@@ -1,7 +1,5 @@
 ﻿using SkiaSharp;
 using System.Windows;
-using System;
-using System.Numerics;
 
 namespace Gui;
 
@@ -17,6 +15,13 @@ public partial class MainWindow : Window
 
     private void SKElement_PaintSurface(object sender, SkiaSharp.Views.Desktop.SKPaintSurfaceEventArgs e)
     {
-        SimpleSkiaExample.Draw(e.Surface.Canvas, new SKSize((float)_skElm.ActualWidth, (float)_skElm.ActualHeight));
+        bool skiaTest = false;
+        if (skiaTest)
+        {
+            SimpleSkiaExample.Draw(e.Surface.Canvas, new SKSize((float)_skElm.ActualWidth, (float)_skElm.ActualHeight));
+            return;
+        }
+
+        Simple3dRenderer.Draw(e);
     }
 }
